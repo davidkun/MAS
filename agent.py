@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import numpy as np
-from simParams import *
+from cfg import *
 
 class point():
   """ 
@@ -20,8 +20,10 @@ class point():
     Initialize point dynamics 
     """
     
-    self.X = X
-    self.Xhist = np.array([[self.X[0,0],self.X[1,0]]])
+    self.X0 = np.matrix(X)
+    self.X = np.matrix(X)
+    
+    self.Xhist = np.matrix([self.X[0,0],self.X[1,0]])
     
     self.A = np.matrix([ [1,0,Ts,0 ],
                          [0,1,0 ,Ts],
@@ -52,9 +54,6 @@ class point():
     # Measurable Output
     self.Z = self.C*self.X
     
-    
     # Update History of X Position (for plotting)
-    sizeX = np.shape(self.Xhist)[0]
-    xPos,yPos = self.X[0,0], self.X[1,0]
-    self.Xhist = np.insert(self.Xhist, sizeX, [xPos,yPos], axis=0)
+    self.Xhist = np.r_[self.Xhist, np.matrix([self.X[0,0],self.X[1,0]])]
   
