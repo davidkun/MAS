@@ -9,9 +9,9 @@ class point():
   The agent is dynamic, it reads location transmissions,
   and has the ability to communicate its own state, X, where:
   
-  X = [ x ]
-      | y |
-      | x'|
+  X = [ x ]     X[k+1] = A * X[k]  +  B * u[k]
+      | y |     
+      | x'|     Y[k]   = C * X[k]
       [ y']
   """
   
@@ -30,10 +30,10 @@ class point():
                          [0,0,1 ,0 ],
                          [0,0,0 ,1 ] ])
   
-    self.B = np.matrix([ [0      , 0        ],
-                         [0      , 0        ],
-                         [Ts**2/2, 0        ],
-                         [0      , Ts**2/2] ])
+    self.B = np.matrix([ [Ts**2/2, 0        ],
+                         [0      , Ts**2/2  ],
+                         [Ts     , 0        ],
+                         [0      , Ts       ]])
 
     self.C = np.asmatrix(np.identity(4))
     
@@ -48,11 +48,8 @@ class point():
     # State
     self.X = self.A*self.X + self.B*u
 
-    # Integral Control
-    self.XI = self.Z - np.r_[wPts[target].T,np.zeros([2,1])]
-    
     # Measurable Output
-    self.Z = self.C*self.X
+    #self.Y = self.C*self.X
     
     # Update History of X Position (for plotting)
     self.Xhist = np.r_[self.Xhist, np.matrix([self.X[0,0],self.X[1,0]])]
