@@ -17,8 +17,8 @@ def main():
   # Initial States
   IC1 = np.matrix([ [1.],
                     [1.],
-                    [0.1],
-                    [0.1] ])
+                    [0.],
+                    [0.] ])
   
   # Create Agent
   leader = agent.point( IC1 )
@@ -75,8 +75,6 @@ def runSim(leader):
           linalg.inv(leader.Wc) * ( Xf - (leader.A**N)*X0 )
       # Implement Control
       leader.step( U )
-      # Plot New Position
-      #plotSim( leader )
   
   # Initialize Plot
   plotSim(leader, initial=True)
