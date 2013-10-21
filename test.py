@@ -8,6 +8,8 @@ from   scipy import linalg
 import agent
 import cfg
 
+# add followers
+
 def main():
   """
   This is a testing function to make sure
