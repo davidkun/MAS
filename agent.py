@@ -25,10 +25,10 @@ class point():
     
     self.Xhist = np.matrix([self.X[0,0],self.X[1,0]])
     
-    self.A = np.matrix([ [1,0,Ts,0 ],
-                         [0,1,0 ,Ts],
-                         [0,0,1 ,0 ],
-                         [0,0,0 ,1 ] ])
+    self.A = np.matrix([ [1, 0, Ts, 0 ],
+                         [0, 1, 0 , Ts],
+                         [0, 0, 1 , 0 ],
+                         [0, 0, 0 , 1 ] ])
   
     self.B = np.matrix([ [Ts**2/2, 0        ],
                          [0      , Ts**2/2  ],
@@ -37,7 +37,7 @@ class point():
 
     self.C = np.asmatrix(np.identity(4))
     
-    self.Z = np.zeros([4,1])
+    #self.Z = np.zeros([4,1])
     
     
   def step( self, u=np.zeros((2,1)) ):
@@ -49,7 +49,7 @@ class point():
     self.X = self.A*self.X + self.B*u
 
     # Measurable Output
-    #self.Y = self.C*self.X
+    self.Y = self.C*self.X
     
     # Update History of X Position (for plotting)
     self.Xhist = np.r_[self.Xhist, np.matrix([self.X[0,0],self.X[1,0]])]
