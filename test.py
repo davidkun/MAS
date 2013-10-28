@@ -20,11 +20,11 @@ def main():
   
   # Create Follower(s)
   f1 = agent.point( cfg.IC2 )
-  f2 = agent.point( cfg.IC3 )
-  f3 = agent.point( cfg.IC4 )
+  #f2 = agent.point( cfg.IC3 )
+  #f3 = agent.point( cfg.IC4 )
   
   # Begin Simulation
-  runSim( leader, f1, f2, f3 )
+  runSim( leader, f1 )
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -72,10 +72,6 @@ def runSim(leader, *follower):
     # Controllability Grammian (Leader)
     leader.Wc = gram( leader.A, leader.B, N )
     
-    #                                                    #
-    # Make the next 2 for-loops as their own functions   #
-    #                                                    #
-    
     for k in range(N):
       # Implement Control U[k] (Leader)
       U = (leader.B.T) * (leader.A.T)**(N-1-k) * \
@@ -84,9 +80,11 @@ def runSim(leader, *follower):
       # Implement Control (Followers)
       if cfg.numFollowers > 0:
         for i in range(cfg.numFollowers):
-          if i == 0:
-            K = dare(leader, follower[i], cfg.Q, cfg.R, i)
-          Uf = -K * (follower[i].X - (leader.X - cfg.r[:,i]))
+          if k == 0:
+            K = dare(leader, follower[i], cfg.Q, cfg.R)
+          # Convert Reference Distance to Body-Frame
+          cfg.bodyRef[:,i] = leaderFrame( leader, i )
+          Uf = -K * (follower[i].X - (leader.X + cfg.bodyRef[:,i]))
           follower[i].step( Uf )
      
   if cfg.stay == True:
@@ -94,7 +92,7 @@ def runSim(leader, *follower):
       leader.step( 0 )
       if cfg.numFollowers > 0:
         for i in range(cfg.numFollowers):
-          Uf = -K * (follower[i].X - (leader.X - cfg.r[:,i]))
+          Uf = -K * (follower[i].X - (leader.X + cfg.bodyRef[:,i]))
           follower[i].step( Uf )
   
   # Initialize Plot
@@ -219,7 +217,7 @@ def gram(A, B, N):
 # Function:   dare      #
 # # # # # # # # # # # # #
 
-def dare(leader, f, Q, R, i):
+def dare(leader, f, Q, R):
   """ 
   Uf = dare(leader, f, Q, R, i) computes the Discrete time
   Algebraic Riccatti Equation (DARE):
@@ -229,15 +227,31 @@ def dare(leader, f, Q, R, i):
     K = (B'XB + R)^-1 * (B'XA)
   
   The gain can be  used to find:
-    Uf = -K * (f.X - (leader.X - cfg.r))
+    Uf = -K * (f.X - (leader.X - r))
   
   which is the control input required for the followers to 
-  track a leader to within a pre-specified distance, cfg.r.
+  track a leader to within a pre-specified distance, r.
   """
   
   X = linalg.solve_discrete_are(f.A, f.B, Q, R)
   K = linalg.inv(f.B.T * X * f.B + R) * (f.B.T * X * f.A)
   return K
+
+def leaderFrame( leader, i ):
+  """
+  bodyRef = leaderFrame( leader, i)
+  
+  Converts the reference distance to body-frame of the leader
+  for each i-th follower, based on direction of Leader's movement.
+  """
+  
+  u = leader.X[2,0]
+  v = leader.X[3,0]
+  rot = np.matrix([ [u, -v],
+                    [v,  u] ])
+  rotNorm = (1 / linalg.det(rot)**0.5) * rot
+  bodyRef = rotNorm * cfg.r[:,i]
+  return np.r_[bodyRef, np.zeros((2,1))]
 
 
 # # # # # # # # # # # # #
