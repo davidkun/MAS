@@ -50,11 +50,11 @@ N = [int(N_time[0]/Ts),
      int(N_time[2]/Ts),
      int(N_time[3]/Ts)]
 
-# Reference Distances for Followers
-r = np.matrix([ [1., -1., 0], 
-                [1.,  1., 1],
-                [0 ,  0 , 0],
-                [0 ,  0 , 0]  ])
+# Reference Distances for Followers (relative to leader)
+# (currently set up for 3 followers)
+bodyRef = np.matrix(np.zeros((4,3)))
+r = np.matrix([ [-1., -1., 0], 
+                [0  ,  1., 1],  ])
 
 # Q,R Cost Matrices for Followers' Control Law
 Q = np.matrix([ [2.,0,0,0],
@@ -66,5 +66,5 @@ R = np.matrix([ [.1 , 0  ],
                 [0  , .1 ] ])
 
 # Some Extra Conditions
-stay = True
-stayTime = int(8/Ts)
+stay = True             # leader waits at final waypoint
+stayTime = int(8/Ts)    # for 8 seconds
