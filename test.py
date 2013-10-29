@@ -20,11 +20,11 @@ def main():
   
   # Create Follower(s)
   f1 = agent.point( cfg.IC2 )
-  #f2 = agent.point( cfg.IC3 )
-  #f3 = agent.point( cfg.IC4 )
+  f2 = agent.point( cfg.IC3 )
+  f3 = agent.point( cfg.IC4 )
   
   # Begin Simulation
-  runSim( leader, f1 )
+  runSim( leader, f1, f2, f3 )
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -77,30 +77,33 @@ def runSim(leader, *follower):
       U = (leader.B.T) * (leader.A.T)**(N-1-k) * \
           linalg.inv(leader.Wc) * ( Xf - (leader.A**N)*X0 )
       leader.step( U )
+      
       # Implement Control (Followers)
       if cfg.numFollowers > 0:
         for i in range(cfg.numFollowers):
           if k == 0:
+            # Get the Feedback Gain, K
             X, K = control(leader, follower[i], cfg.Q, cfg.R)
+            # Get the Kalman Gain, L
             X, L = estimate(leader, follower[i], cfg.stateCov, cfg.sensorCov)
+            # Initialize estimates
             xh_old = np.matrix(np.zeros((4,1)))
             u_old = np.matrix(np.zeros((2,1)))
           
-          # Follower's estimate of Leader: y21
+          # Follower's Estimate of Leader: y21
           y21 = leader.observe()
-          # Follower's estimate of itself: y22
+          # Follower's Estimate of Itself: y22
           y22 = follower[i].observe()
-          
-          xh_new = follower[i].A * xh_old + \
-                   follower[i].B * u_old + \
+          # New Estimate
+          xh_new = follower[i].A * xh_old + follower[i].B * u_old +     \
                    L * ( y22 - follower[i].C * follower[i].A * xh_old - \
-                   follower[i].C * follower[i].B * u_old )
+                         follower[i].C * follower[i].B * u_old          )
           
           # Convert Reference Distance to Body-Frame
-          cfg.bodyRef[:,i] = leaderFrame( leader, i )
+          cfg.bodyRef[:,i] = leaderFrame( y21, i )
           u_new = -K * (follower[i].C * xh_new - (y21 + cfg.bodyRef[:,i]))
           follower[i].step( u_new )
-          
+          # Update Estimates
           xh_old = xh_new
           u_old  = u_new
         
@@ -281,11 +284,11 @@ def leaderFrame( leader, i ):
   bodyRef = leaderFrame( leader, i)
   
   Converts the reference distance to body-frame of the leader
-  for each i-th follower, based on direction of Leader's movement.
+  for each i-th follower, based on observed direction of Leader's movement.
   """
   
-  u = leader.X[2,0]
-  v = leader.X[3,0]
+  u = leader[2,0]
+  v = leader[3,0]
   rot = np.matrix([ [u, -v],
                     [v,  u] ])
   rotNorm = (1 / linalg.det(rot)**0.5) * rot
