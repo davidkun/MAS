@@ -53,8 +53,8 @@ N = [int(N_time[0]/Ts),
 # Reference Distances for Followers (relative to leader)
 # (currently set up for 3 followers)
 bodyRef = np.matrix(np.zeros((4,3)))
-r = np.matrix([ [-1., -1., 0], 
-                [0  ,  1., 1],  ])
+r = np.matrix([ [-1.0 , -1.0 , -1.8], 
+                [ 0.5 , -0.5 ,  0.0],  ])
 
 # Q,R Cost Matrices for Followers' Control Law
 Q = np.matrix([ [2.,0,0,0],
@@ -72,5 +72,5 @@ stateCov   = np.identity(4) * 0.0001
 sensorCov  = np.identity(4) * 0.0001
 
 # Some Extra Conditions
-stay = True             # leader waits at final waypoint
+stay = False             # leader waits at final waypoint
 stayTime = int(8/Ts)    # for 8 seconds
