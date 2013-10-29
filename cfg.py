@@ -65,6 +65,12 @@ Q = np.matrix([ [2.,0,0,0],
 R = np.matrix([ [.1 , 0  ],
                 [0  , .1 ] ])
 
+# Mean and Covariance of Noise in System
+stateMean  = (0,0,0,0)
+sensorMean = (0,0,0,0) 
+stateCov   = np.identity(4) * 0.0001
+sensorCov  = np.identity(4) * 0.0001
+
 # Some Extra Conditions
 stay = True             # leader waits at final waypoint
 stayTime = int(8/Ts)    # for 8 seconds
