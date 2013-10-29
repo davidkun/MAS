@@ -170,7 +170,7 @@ def plotSim(leader, follower, initial=False, final=False):
     ani = animation.FuncAnimation( cfg.fig, 
                                    plotAnimate,
                                    np.arange(1,len(cfg.hist)),
-                                   interval=cfg.Ts*1000,
+                                   interval=50,
                                    blit=True,
                                    init_func=plotInit )        
     # Plot Vehicle Path
