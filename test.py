@@ -81,12 +81,29 @@ def runSim(leader, *follower):
       if cfg.numFollowers > 0:
         for i in range(cfg.numFollowers):
           if k == 0:
-            K = dare(leader, follower[i], cfg.Q, cfg.R)
+            X, K = control(leader, follower[i], cfg.Q, cfg.R)
+            X, L = estimate(leader, follower[i], cfg.stateCov, cfg.sensorCov)
+            xh_old = np.matrix(np.zeros((4,1)))
+            u_old = np.matrix(np.zeros((2,1)))
+          
+          # Follower's estimate of Leader: y21
+          y21 = leader.observe()
+          # Follower's estimate of itself: y22
+          y22 = follower[i].observe()
+          
+          xh_new = follower[i].A * xh_old + \
+                   follower[i].B * u_old + \
+                   L * ( y22 - follower[i].C * follower[i].A * xh_old - \
+                   follower[i].C * follower[i].B * u_old )
+          
           # Convert Reference Distance to Body-Frame
           cfg.bodyRef[:,i] = leaderFrame( leader, i )
-          Uf = -K * (follower[i].X - (leader.X + cfg.bodyRef[:,i]))
-          follower[i].step( Uf )
-     
+          u_new = -K * (follower[i].C * xh_new - (y21 + cfg.bodyRef[:,i]))
+          follower[i].step( u_new )
+          
+          xh_old = xh_new
+          u_old  = u_new
+        
   if cfg.stay == True:
     for k in range(cfg.stayTime):
       leader.step( 0 )
@@ -217,25 +234,47 @@ def gram(A, B, N):
 # Function:   dare      #
 # # # # # # # # # # # # #
 
-def dare(leader, f, Q, R):
+def control(leader, f, Q, R):
   """ 
-  Uf = dare(leader, f, Q, R, i) computes the Discrete time
-  Algebraic Riccatti Equation (DARE):
+  X, K = control(leader, f, Q, R) solves the Discrete time
+  Algebraic Riccatti Equation (DARE) for X:
     X = A'XA - (A'XB) * (R+B'XB)^-1 * (B'XA) + Q
   
-  Then computes and returns the gain, K:
+  Then computes the gain, K:
     K = (B'XB + R)^-1 * (B'XA)
+  
+  And returns both X and K.
   
   The gain can be  used to find:
     Uf = -K * (f.X - (leader.X - r))
   
   which is the control input required for the followers to 
-  track a leader to within a pre-specified distance, r.
+  track a leader to within a pre-specified distance, r,
+  for the deterministic case.
   """
   
-  X = linalg.solve_discrete_are(f.A, f.B, Q, R)
-  K = linalg.inv(f.B.T * X * f.B + R) * (f.B.T * X * f.A)
-  return K
+  X = linalg.solve_discrete_are( f.A, f.B, Q, R )
+  K = linalg.inv( f.B.T * X * f.B + R ) * (f.B.T * X * f.A)
+  return X, K
+
+
+def estimate(leader, f, Q, R):
+  """
+  X, L = estimate(leader, f, Q, R) solves the Discrete time
+  Algebraic Riccatti Equation (DARE) for X:
+    X = AXA' - (AXC') * (R+CXC')^-1 * (CXA') + Q
+  
+  Then computes the steady-state Kalman gain, L:
+  
+  Q = covariance of state error
+  R = covariance of measurement error
+  """
+  
+  #sys.exit(0)
+  X = linalg.solve_discrete_are( f.A.T, f.C.T, np.matrix(Q), np.matrix(R) )
+  L = X * f.C.T * linalg.inv( f.C * X * f.C.T + np.asmatrix(R) )
+  return X, L
+
 
 def leaderFrame( leader, i ):
   """
