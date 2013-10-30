@@ -1,3 +1,5 @@
+# Multi-Agent System Simulation #
+
 This project is intended for use in simulating multi-agent systems, comprised
 of any number of agents, in cooperative control schemes. The agents can be non-
 homogenous, i.e. they can have different dynamics and/or sensors, depending
