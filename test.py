@@ -23,10 +23,16 @@ def main():
   f2 = agent.point( cfg.IC3 )
   f3 = agent.point( cfg.IC4 )
   
-  # Begin Simulation
+  # Run Simulation
   runSim( leader, f1, f2, f3 )
-
-
+  
+  # Plot Error
+  #np.savetxt("e.csv", leader.e, delimiter=",")
+  fig = plt.figure()
+  plt.plot(np.matrix(np.arange(0.0,cfg.T,cfg.Ts)), leader.e[0,:], '.b')
+  plt.show()
+  
+  
 # # # # # # # # # # # # # # # # # # # # # # # # # #
 #                                                 #
 #        Supporting Functions:                    #
@@ -46,6 +52,10 @@ def runSim(leader, *follower):
   
   # Number of Followers
   cfg.numFollowers = len(follower)
+  
+  # Error Storage
+  leader.e = np.matrix(np.zeros((4,int(cfg.T/cfg.Ts))))
+  e_count  = 0
   
   # Track Each Waypoint Sequentially
   for target in range(cfg.n_wPts):
@@ -73,47 +83,85 @@ def runSim(leader, *follower):
     leader.Wc = gram( leader.A, leader.B, N )
     
     for k in range(N):
-      # Implement Control U[k] (Leader)
+      if k == 0:
+        # Get the Feedback Gain, K
+        K = fbGain( leader, cfg.Q, cfg.R )
+        # Get the simple Kalman Gain, Ls, using regular Filter
+        Ls = kalGain( leader )
+        # Get the advanced Kalman Gain, La, using improved Filter
+        # La = ?????
+        
+        # Initialize Estimates
+        leader.xh_old = np.matrix(np.zeros((4,1)))
+        leader.u_old  = np.matrix(np.zeros((2,1)))
+        
+      # Leader's Observation of Itself: y11
+      leader.y11 = leader.selfObserve()
+      # Leader's Observation of Follower: y12
+      leader.y12 = follower[0].observe()
+      
+      # 
+      #Aa = np.r_[ np.c_[ leader.A, np.zeros_like(leader.A) ],
+      #            np.c_[ -leader.B*K*leader.C, leader.A+leader.B*K*leader.C ] ]
+      
+      # New Estimate
+      leader.xh_new = leaderEst( leader, Ls, cfg.leaderEstType)
+      
+      # Compute and Store Error
+      e = leader.xh_new - leader.X
+      leader.e[:,e_count] = e[:,0]
+      e_count = e_count + 1
+      
+      # Implement Leader's Control
       U = (leader.B.T) * (leader.A.T)**(N-1-k) * \
           linalg.inv(leader.Wc) * ( Xf - (leader.A**N)*X0 )
       leader.step( U )
       
-      # Implement Control (Followers)
+      # Update Estimates
+      leader.xh_old = leader.xh_new
+      #leader.u_old  = leader.u_new
+      
+      # Implement Followers' Control
       if cfg.numFollowers > 0:
         for i in range(cfg.numFollowers):
           if k == 0:
-            # Get the Feedback Gain, K
-            X, K = control(leader, follower[i], cfg.Q, cfg.R)
-            # Get the Kalman Gain, L
-            X, L = estimate(leader, follower[i], cfg.stateCov, cfg.sensorCov)
-            # Initialize estimates
-            xh_old = np.matrix(np.zeros((4,1)))
-            u_old = np.matrix(np.zeros((2,1)))
+            # Get the Follower Feedback Gain, Kf
+            Kf = fbGain( follower[i], cfg.Q, cfg.R )
+            # Get the Follower Kalman Gain, Lf
+            Lf = kalGain( follower[i] )
+            # Initialize Estimates
+            follower[i].xh_old = np.matrix(np.zeros((4,1)))
+            follower[i].u_old  = np.matrix(np.zeros((2,1)))
           
-          # Follower's Estimate of Leader: y21
-          y21 = leader.observe()
-          # Follower's Estimate of Itself: y22
-          y22 = follower[i].observe()
+          # Follower's Observation of Leader: y21
+          follower[i].y21 = leader.observe()
+          # Follower's Observation of Itself: y22
+          follower[i].y22 = follower[i].selfObserve()
+          
           # New Estimate
-          xh_new = follower[i].A * xh_old + follower[i].B * u_old +     \
-                   L * ( y22 - follower[i].C * follower[i].A * xh_old - \
-                         follower[i].C * follower[i].B * u_old          )
+          follower[i].xh_new = followerEst( follower[i], Lf )
           
           # Convert Reference Distance to Body-Frame
-          cfg.bodyRef[:,i] = leaderFrame( y21, i )
-          u_new = -K * (follower[i].C * xh_new - (y21 + cfg.bodyRef[:,i]))
-          follower[i].step( u_new )
+          #cfg.bodyRef[:,i] = leaderFrame( follower[i].y21, i )
+          cfg.bodyRef[0:2,i] = cfg.r[:,i]
+          
+          # Obtain New Control Input
+          follower[i].u_new = -Kf * (follower[i].C * follower[i].xh_new - 
+                                    (follower[i].y21 + cfg.bodyRef[:,i]))
+          # Implement New Control
+          follower[i].step( follower[i].u_new )
           # Update Estimates
-          xh_old = xh_new
-          u_old  = u_new
-        
-  if cfg.stay == True:
-    for k in range(cfg.stayTime):
-      leader.step( 0 )
-      if cfg.numFollowers > 0:
-        for i in range(cfg.numFollowers):
-          Uf = -K * (follower[i].X - (leader.X + cfg.bodyRef[:,i]))
-          follower[i].step( Uf )
+          follower[i].xh_old = follower[i].xh_new
+          follower[i].u_old  = follower[i].u_new
+  
+  #if cfg.stay == True:
+  #  for k in range(cfg.stayTime):
+  #    leader.step( 0 )
+  #    if cfg.numFollowers > 0:
+  #      for i in range(cfg.numFollowers):
+  #        Uf = -K * (follower[i].X - (leader.X + cfg.bodyRef[:,i]))
+  #        follower[i].step( Uf )
+  
   
   # Initialize Plot
   plotSim(leader, follower, initial=True)
@@ -137,7 +185,7 @@ def plotSim(leader, follower, initial=False, final=False):
   
     cfg.ax = cfg.fig.add_subplot(111, \
           autoscale_on=False, \
-          xlim=(-2, 12), ylim=(0, 14))
+          xlim=(-2, 14), ylim=(-2, 14))
     cfg.ax.grid(True)
     plt.ylabel('Y [m]',rotation=0)
     plt.xlabel('X [m]')
@@ -234,56 +282,118 @@ def gram(A, B, N):
 
 
 # # # # # # # # # # # # #
-# Function:   dare      #
+# Function:   fbGain    #
 # # # # # # # # # # # # #
 
-def control(leader, f, Q, R):
+def fbGain(f, Q, R):
   """ 
-  X, K = control(leader, f, Q, R) solves the Discrete time
+  K = fbGain(f, Q, R) solves the Discrete time
   Algebraic Riccatti Equation (DARE) for X:
     X = A'XA - (A'XB) * (R+B'XB)^-1 * (B'XA) + Q
   
-  Then computes the gain, K:
+  Then computes and returns the feedback gain, K:
     K = (B'XB + R)^-1 * (B'XA)
   
-  And returns both X and K.
-  
-  The gain can be  used to find:
-    Uf = -K * (f.X - (leader.X - r))
+  The feedback gain can be  used to find the control input:
+    u = -K * (f.X - (leader.X - r))
   
   which is the control input required for the followers to 
   track a leader to within a pre-specified distance, r,
-  for the deterministic case.
+  
+  f : agent
+  Q : cost matrix
+  R : cost matrix
   """
   
   X = linalg.solve_discrete_are( f.A, f.B, Q, R )
-  K = linalg.inv( f.B.T * X * f.B + R ) * (f.B.T * X * f.A)
-  return X, K
+  K = linalg.inv( f.B.T * X * f.B + R ) * ( f.B.T * X * f.A )
+  return K
 
 
-def estimate(leader, f, Q, R):
+# # # # # # # # # # # # #
+# Function:   kalGain   #
+# # # # # # # # # # # # #
+
+def kalGain(f):
   """
-  X, L = estimate(leader, f, Q, R) solves the Discrete time
-  Algebraic Riccatti Equation (DARE) for X:
+  L = kalGain(f) solves the Discrete-time Algebraic Riccatti 
+  Equation (DARE) for X:
     X = AXA' - (AXC') * (R+CXC')^-1 * (CXA') + Q
   
-  Then computes the steady-state Kalman gain, L:
+  Then computes and returns the steady-state Kalman gain, L:
+    L = XC' * (CXC'+R)^-1
   
-  Q = covariance of state error
-  R = covariance of measurement error
+  f : agent
+  Q : covariance of state error
+  R : covariance of measurement error
   """
   
-  #sys.exit(0)
-  X = linalg.solve_discrete_are( f.A.T, f.C.T, np.matrix(Q), np.matrix(R) )
-  L = X * f.C.T * linalg.inv( f.C * X * f.C.T + np.asmatrix(R) )
-  return X, L
+  Q = np.matrix( f.stateCov  )
+  R = np.matrix( f.sensorCov )
+  X = linalg.solve_discrete_are( f.A.T, f.C.T, Q, R )
+  L = X * f.C.T * linalg.inv( f.C * X * f.C.T + R )
+  return L
 
 
-def leaderFrame( leader, i ):
+# # # # # # # # # # # # # # #
+# Function:  followerEst    #
+# # # # # # # # # # # # # # #
+
+
+def followerEst(f, L):
   """
-  bodyRef = leaderFrame( leader, i)
+  xh_new = followerEst(f, L) used inside a for-loop will
+  recursively estimate the state of the follower using a
+  typical Kalman Filter algorithm:
   
-  Converts the reference distance to body-frame of the leader
+  xh_new = A*xh_old + B*u_old + L*(y22 - C*A*xh_old - C*B*u_old)
+  
+  f      :  follower (agent)
+  L      :  Kalman gain
+  xh_new :  new estimate of x
+  xh_old :  old estimate of x
+  y22    :  measured output of itself
+  u_old  :  previous control input
+  """
+  
+  xh_new = f.A * f.xh_old + f.B * f.u_old + \
+           L * ( f.y22 - f.C * f.A * f.xh_old - f.C * f.B * f.u_old )
+  return xh_new
+
+# # # # # # # # # # # # # # #
+# Function:  leaderEst      #
+# # # # # # # # # # # # # # #
+
+
+def leaderEst(l, Ls, kalType):
+  """
+  xh_new = leaderEst(l, L, kalType) is the leader's estimation method.
+  
+  If kalType == 'simple', the Leader will estimate its state
+  only based on its own observation. The Kalman gain must be
+  provided as well.
+  
+  If kalType == 'adv', the Leader wil estimate its state using
+  its own observations AND the followers' observation.
+  """
+  
+  if kalType == 'simple':
+    xh_new = l.A * l.xh_old + l.B * l.u_old + \
+             Ls * ( l.y11 - l.C * l.A * l.xh_old - l.C * l.B * l.u_old )
+  if kalType == 'adv':
+    xh_new = 0
+  
+  return xh_new
+  
+# # # # # # # # # # # # # # #
+# Function:  leadFrame      #
+# # # # # # # # # # # # # # #
+
+def leaderFrame(leader, i):
+  """
+  bodyRef = leaderFrame(leader, i)
+  
+  Converts the global reference distance to body-frame of the leader
   for each i-th follower, based on observed direction of Leader's movement.
   """
   

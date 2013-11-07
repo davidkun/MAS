@@ -24,6 +24,7 @@ class point():
     """
     
     self.X0 = np.matrix(X)
+    
     self.X = np.matrix(X)
     
     self.Xhist = np.matrix([self.X[0,0],self.X[1,0]])
@@ -38,16 +39,22 @@ class point():
                          [Ts     , 0        ],
                          [0      , Ts       ]])
 
-    self.C = np.asmatrix(np.identity(4))
+    self.C = np.matrix(np.identity(4))
+    
+    # Mean and Covariance of Noise in System
+    self.stateMean  = (0,0,0,0)
+    self.stateCov   = np.identity(4) * 0.0001  # Q
+    self.sensorMean = (0,0,0,0)
+    self.sensorCov  = np.identity(4) * 0.0001  # R
     
     
-  def step( self, u=np.zeros((2,1)) ):
+  def step( self, u=0 ):
     """
     Step in time (integrate)
     """
     
     # State Noise
-    w = np.matrix(np.random.multivariate_normal(stateMean,stateCov)).T
+    w = np.matrix(np.random.multivariate_normal(self.stateMean,self.stateCov)).T
     
     # State
     self.X = self.A*self.X + self.B*u + w
@@ -62,10 +69,24 @@ class point():
     """
     
     # Sensor Noise
-    v = np.matrix(np.random.multivariate_normal(sensorMean,sensorCov)).T
+    v = np.matrix(np.random.multivariate_normal(self.sensorMean,self.sensorCov)).T
     
     # Measurable Output
-    self.Y = self.C*self.X + v
+    Y = self.C*self.X + v
     
-    return self.Y
+    return Y
+  
+  
+  def selfObserve( self ):
+    """
+    Return noisy output measurement to itself.
+    """
+    
+    # Sensor Noise
+    v = np.matrix(np.random.multivariate_normal(self.sensorMean,self.sensorCov)).T
+    
+    # Measurable Output
+    Y = self.C*self.X + v
+    
+    return Y
   
