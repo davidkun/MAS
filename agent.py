@@ -23,30 +23,33 @@ class point():
     Initialize point dynamics 
     """
     
-    self.X0 = np.matrix(X)
-    
-    self.X = np.matrix(X)
-    
+    self.X0    = np.matrix(X)
+    self.X     = np.matrix(X)
     self.Xhist = np.matrix([self.X[0,0],self.X[1,0]])
     
-    self.A = np.matrix([ [1, 0, Ts, 0 ],
-                         [0, 1, 0 , Ts],
-                         [0, 0, 1 , 0 ],
-                         [0, 0, 0 , 1 ] ])
+    self.A     = np.matrix([ [1, 0, Ts, 0 ],
+                             [0, 1, 0 , Ts],
+                             [0, 0, 1 , 0 ],
+                             [0, 0, 0 , 1 ] ])
   
-    self.B = np.matrix([ [Ts**2/2, 0        ],
-                         [0      , Ts**2/2  ],
-                         [Ts     , 0        ],
-                         [0      , Ts       ]])
+    self.B     = np.matrix([ [0.5*Ts**2, 0.        ],
+                             [0.       , 0.5*Ts**2 ],
+                             [Ts       , 0.        ],
+                             [0.       , Ts        ]])
 
     self.C = np.matrix(np.identity(4))
     
     # Mean and Covariance of Noise in System
     self.stateMean  = (0,0,0,0)
-    self.stateCov   = np.identity(4) * 0.0001  # Q
+    self.stateCov   = np.identity(4) * 0.01  # Q
     self.sensorMean = (0,0,0,0)
-    self.sensorCov  = np.identity(4) * 0.0001  # R
+    self.sensorCov  = np.identity(4) * 0.01  # R
     
+    # Initialize State Estimate and Control Input
+    self.xh_old = np.matrix(np.zeros((4,1)))
+    self.u_old  = np.matrix(np.zeros((2,1)))
+    self.Xref_new   = np.matrix(np.zeros((4,1)))
+    self.Xref_old   = np.matrix(np.zeros((4,1)))
     
   def step( self, u=0 ):
     """

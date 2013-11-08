@@ -36,7 +36,7 @@ wPts = np.matrix([ [6., 6.],
 n_wPts = np.shape(wPts)[0]
 
 # Simulation Time [s]
-T = 22.5
+T = 18.
 
 # Sample Time [s]
 Ts =  0.05
@@ -54,7 +54,7 @@ N = [int(N_time[0]/Ts),
 # (currently set up for 3 followers)
 bodyRef = np.matrix(np.zeros((4,3)))
 r = np.matrix([ [-1.0 , -1.0 , -1.8], 
-                [ 0.5 , -0.5 ,  0.0],  ])
+                [-0.5 ,  0.5 ,  0.0],  ])
 
 # Q,R Cost Matrices for Followers' Control Law
 Q = np.matrix([ [2.,0,0,0],
@@ -69,3 +69,4 @@ R = np.matrix([ [.1 , 0  ],
 stay = False             # leader waits at final waypoint
 stayTime = int(8/Ts)    # for 8 seconds
 leaderEstType = 'simple' # type of KF that leader uses ('simple' / 'adv')
+leaderEstSwitch = 1     # bool for intial advanced leader estimation

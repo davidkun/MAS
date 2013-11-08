@@ -26,10 +26,22 @@ def main():
   # Run Simulation
   runSim( leader, f1, f2, f3 )
   
-  # Plot Error
-  #np.savetxt("e.csv", leader.e, delimiter=",")
+  # Simulation Animation
+  plotSim(leader, f1, f2, f3 )
+  
+  #np.savetxt("data/e.csv", leader.e, delimiter=",")
   fig = plt.figure()
-  plt.plot(np.matrix(np.arange(0.0,cfg.T,cfg.Ts)), leader.e[0,:], '.b')
+  plt.plot(np.matrix(np.arange(0.0,cfg.T,cfg.Ts)).T, leader.e[0,:].T, \
+  'b', label='x1 error')
+  plt.plot(np.matrix(np.arange(0.0,cfg.T,cfg.Ts)).T, leader.e[1,:].T, \
+  'g', label='x2 error')
+  plt.plot(np.matrix(np.arange(0.0,cfg.T,cfg.Ts)).T, leader.e[4,:].T, \
+  'r', label=r'$e^T e$')
+  plt.grid()
+  plt.legend(loc=2)
+  plt.ylabel('Error [m]',rotation=90)
+  plt.xlabel('Time [s]')
+  #plt.title('Augmented Kalman Filter')
   plt.show()
   
   
@@ -50,18 +62,24 @@ def runSim(leader, *follower):
   Simulate vehicles' movement in the xy-plane. 
   """
   
+  # Total Time Steps
+  N_total  = int(cfg.T/cfg.Ts)
+    
   # Number of Followers
   cfg.numFollowers = len(follower)
   
   # Error Storage
-  leader.e = np.matrix(np.zeros((4,int(cfg.T/cfg.Ts))))
+  leader.e = np.matrix(np.zeros((5,N_total)))
   e_count  = 0
   
   # Track Each Waypoint Sequentially
   for target in range(cfg.n_wPts):
     
     # Current Initial State
-    X0 = leader.X
+    if target==0:
+      X0 = leader.X0
+    else:
+      X0 = leader.xh_new
     
     # Determine Xf velocities: u,v
     if (cfg.n_wPts - 1) > target:
@@ -69,69 +87,66 @@ def runSim(leader, *follower):
       u = 0.4 * np.cos( check*np.pi )
       check = cfg.wPts[target+1,1] < cfg.wPts[target,1]
       v = 0.4 * np.cos( check*np.pi )
+      #u,v = 0.0, 0.0
     else:
       u, v = 0, 0
     
     # Final Desired State
-    Xf = np.r_[cfg.wPts[target].T, \
-               np.matrix([[u],[v]])]
+    Xf = np.r_[cfg.wPts[target].T, np.matrix([[u],[v]])]
     
     # Time Horizon for Current Waypoint
     N = cfg.N[target]
     
-    # Controllability Grammian (Leader)
+    # Leader's Controllability Grammian
     leader.Wc = gram( leader.A, leader.B, N )
+    # Leader's Feedback Gain, K
+    K = fbGain( leader, cfg.Q, cfg.R )
+    # Leader's simple Kalman Gain, Ls, using regular Filter
+    leader.Ls = kalGain( leader )    
     
-    for k in range(N):
-      if k == 0:
-        # Get the Feedback Gain, K
-        K = fbGain( leader, cfg.Q, cfg.R )
-        # Get the simple Kalman Gain, Ls, using regular Filter
-        Ls = kalGain( leader )
-        # Get the advanced Kalman Gain, La, using improved Filter
-        # La = ?????
-        
-        # Initialize Estimates
-        leader.xh_old = np.matrix(np.zeros((4,1)))
-        leader.u_old  = np.matrix(np.zeros((2,1)))
-        
+    for k in range(N):        
       # Leader's Observation of Itself: y11
       leader.y11 = leader.selfObserve()
       # Leader's Observation of Follower: y12
       leader.y12 = follower[0].observe()
       
-      # 
-      #Aa = np.r_[ np.c_[ leader.A, np.zeros_like(leader.A) ],
-      #            np.c_[ -leader.B*K*leader.C, leader.A+leader.B*K*leader.C ] ]
-      
       # New Estimate
-      leader.xh_new = leaderEst( leader, Ls, cfg.leaderEstType)
+      leader.xh_new = leaderEst( leader, follower )
       
       # Compute and Store Error
-      e = leader.xh_new - leader.X
-      leader.e[:,e_count] = e[:,0]
+      e  = leader.xh_new - leader.X
+      e0 = e.T*e
+      leader.e[:,e_count] = np.r_[ e[:,0], e0 ]
       e_count = e_count + 1
       
-      # Implement Leader's Control
-      U = (leader.B.T) * (leader.A.T)**(N-1-k) * \
-          linalg.inv(leader.Wc) * ( Xf - (leader.A**N)*X0 )
-      leader.step( U )
+      # Leader's Tracking Control, u_ref
+      if k==0:
+        leader.Xref_new = X0
+      else:
+        leader.Xref_new = leader.A*leader.Xref_old + leader.B*u_ref
+        
+      u_ref = (leader.B.T) * (leader.A.T)**(N-1-k) * linalg.inv(leader.Wc) * \
+              ( Xf - (leader.A**N)*X0 )
+      # Leader's Total Control Input
+      leader.u_new =  -u_ref - K*( leader.C*leader.xh_new - leader.C*leader.Xref_new )
+      # Implement Control Input
+      leader.step( leader.u_new )
       
       # Update Estimates
       leader.xh_old = leader.xh_new
-      #leader.u_old  = leader.u_new
+      leader.u_old  = leader.u_new
+      leader.Xref_old = leader.Xref_new
       
       # Implement Followers' Control
       if cfg.numFollowers > 0:
         for i in range(cfg.numFollowers):
           if k == 0:
             # Get the Follower Feedback Gain, Kf
-            Kf = fbGain( follower[i], cfg.Q, cfg.R )
+            follower[i].K = fbGain( follower[i], cfg.Q, cfg.R )
+            Kf            = follower[i].K
             # Get the Follower Kalman Gain, Lf
-            Lf = kalGain( follower[i] )
-            # Initialize Estimates
-            follower[i].xh_old = np.matrix(np.zeros((4,1)))
-            follower[i].u_old  = np.matrix(np.zeros((2,1)))
+            follower[i].L = kalGain( follower[i] )
+            Lf            = follower[i].L
           
           # Follower's Observation of Leader: y21
           follower[i].y21 = leader.observe()
@@ -163,74 +178,65 @@ def runSim(leader, *follower):
   #        follower[i].step( Uf )
   
   
-  # Initialize Plot
-  plotSim(leader, follower, initial=True)
-  
-  # Animate Plot
-  plotSim(leader, follower, final=True)
-  
-  
 # # # # # # # # # # # # #
 # Function:   plotSim   #
 # # # # # # # # # # # # #
 
-def plotSim(leader, follower, initial=False, final=False):
+def plotSim(leader, *follower):
   """
   Plot vehicle movement in the xy-plane.
   """
   
-  if initial:
-    # Create Figure
-    cfg.fig = plt.figure()
+  # Create Figure
+  cfg.fig = plt.figure()
+
+  cfg.ax = cfg.fig.add_subplot(111, \
+        autoscale_on=False, \
+        xlim=(-2, 14), ylim=(-2, 14))
+  cfg.ax.grid(True)
+  plt.ylabel('Y [m]',rotation=0)
+  plt.xlabel('X [m]')
   
-    cfg.ax = cfg.fig.add_subplot(111, \
-          autoscale_on=False, \
-          xlim=(-2, 14), ylim=(-2, 14))
-    cfg.ax.grid(True)
-    plt.ylabel('Y [m]',rotation=0)
-    plt.xlabel('X [m]')
-    
-    # Add Waypoints to Figure
-    plt.plot(cfg.wPts[:,0],cfg.wPts[:,1], 'o', color='0.75', markersize=23)
-    
-    # Add Initial Vehicle Location(s)
-    plt.plot(leader.X0[0,0], leader.X0[1,0], 'o', color='lightskyblue')
-    if len(follower)>0:
-      for i in range(len(follower)):
-        plt.plot(follower[i].X0[0,0], follower[i].X0[1,0], 'D', \
-                 color='lightgreen')
-    
-    # Initialize Vehicle Location on Figure
-    cfg.point, = cfg.ax.plot([], [], 'ob')
-    cfg.pointf, = cfg.ax.plot([], [], 'D', color='mediumseagreen')
-    cfg.track, = cfg.ax.plot([], [], '-k')
-    
-    # Initialize Timestamp on Figure
-    cfg.timeStamp = 'Time = %.1f s'
-    cfg.time_text = cfg.ax.text(0.05, 0.9, '', transform=cfg.ax.transAxes)
+  # Add Waypoints to Figure
+  plt.plot(cfg.wPts[:,0],cfg.wPts[:,1], 'o', color='0.75', markersize=23)
   
-  if final:
-    cfg.hist = leader.Xhist
-    if len(follower)>0:
-      for i in range(len(follower)):
-        cfg.hist = np.c_[cfg.hist, follower[i].Xhist]
-    
-    ani = animation.FuncAnimation( cfg.fig, 
-                                   plotAnimate,
-                                   np.arange(1,len(cfg.hist)),
-                                   interval=50,
-                                   blit=True,
-                                   init_func=plotInit )        
-    # Plot Vehicle Path
-    track = cfg.ax.plot(leader.Xhist[:,0],leader.Xhist[:,1])
-    plt.setp(track, linestyle=':', color='b')
-    
-    # Show Animation
-    plt.show()
-    
-    # Save Animation Video (requires ffmpeg, 
-    # from https://github.com/FFmpeg/FFmpeg)
-    #ani.save('waypointVid.mp4', writer="ffmpeg", fps=15)
+  # Add Initial Vehicle Location(s)
+  plt.plot(leader.X0[0,0], leader.X0[1,0], 'o', color='lightskyblue')
+  if len(follower)>0:
+    for i in range(len(follower)):
+      plt.plot(follower[i].X0[0,0], follower[i].X0[1,0], 'D', \
+               color='lightgreen')
+  
+  # Initialize Vehicle Location on Figure
+  cfg.point, = cfg.ax.plot([], [], 'ob')
+  cfg.pointf, = cfg.ax.plot([], [], 'D', color='mediumseagreen')
+  cfg.track, = cfg.ax.plot([], [], '-k')
+  
+  # Initialize Timestamp on Figure
+  cfg.timeStamp = 'Time = %.1f s'
+  cfg.time_text = cfg.ax.text(0.05, 0.9, '', transform=cfg.ax.transAxes)
+
+  cfg.hist = leader.Xhist
+  if len(follower)>0:
+    for i in range(len(follower)):
+      cfg.hist = np.c_[cfg.hist, follower[i].Xhist]
+  
+  ani = animation.FuncAnimation( cfg.fig, 
+                                 plotAnimate,
+                                 np.arange(1,len(cfg.hist)),
+                                 interval=50,
+                                 blit=True,
+                                 init_func=plotInit )        
+  # Plot Vehicle Path
+  track = cfg.ax.plot(leader.Xhist[:,0],leader.Xhist[:,1])
+  plt.setp(track, linestyle=':', color='b')
+  
+  # Show Animation
+  plt.show()
+  
+  # Save Animation Video (requires ffmpeg, 
+  # from https://github.com/FFmpeg/FFmpeg)
+  #ani.save('sim1.mp4', writer="ffmpeg", fps=15)
 
 
 # # # # # # # # # # # # #
@@ -285,7 +291,7 @@ def gram(A, B, N):
 # Function:   fbGain    #
 # # # # # # # # # # # # #
 
-def fbGain(f, Q, R):
+def fbGain(f, Q=cfg.Q, R=cfg.R):
   """ 
   K = fbGain(f, Q, R) solves the Discrete time
   Algebraic Riccatti Equation (DARE) for X:
@@ -365,28 +371,73 @@ def followerEst(f, L):
 # # # # # # # # # # # # # # #
 
 
-def leaderEst(l, Ls, kalType):
+def leaderEst(*agents):
   """
-  xh_new = leaderEst(l, L, kalType) is the leader's estimation method.
+  xh_new = leaderEst(*agents) is the leader's estimation method.
   
-  If kalType == 'simple', the Leader will estimate its state
-  only based on its own observation. The Kalman gain must be
-  provided as well.
+  If only the leader is passed, the leader will estimate its state
+  only based on its own observation.
   
-  If kalType == 'adv', the Leader wil estimate its state using
-  its own observations AND the followers' observation.
+  If leader and followers are passed, the leader will estimate its 
+  state using its own observations AND the followers' observation.
   """
   
-  if kalType == 'simple':
+  # Simple Estimation
+  if len(agents)==1:
+    l = agents[0]
     xh_new = l.A * l.xh_old + l.B * l.u_old + \
-             Ls * ( l.y11 - l.C * l.A * l.xh_old - l.C * l.B * l.u_old )
-  if kalType == 'adv':
-    xh_new = 0
+             l.Ls * ( l.y11 - l.C * l.A * l.xh_old - l.C * l.B * l.u_old )
   
+  # Advanced Estimation
+  if len(agents)>1:
+    l  = agents[0]
+    f  = agents[1][0]
+    
+    if cfg.leaderEstSwitch:
+      # Obtain Leader's and Follower's Data
+      K2 = fbGain(f)
+      L2 = kalGain(f)
+      Q1 = np.matrix( l.stateCov  )
+      Q2 = np.matrix( f.stateCov  )
+      R2 = np.matrix( f.sensorCov )
+      X  = linalg.solve_discrete_are( f.A.T, f.C.T, Q2, R2 )
+      P  = (np.matrix(np.identity(4)) - L2*f.C) * X
+      
+      # Build Augment Matrices
+      cfg.Abar = np.r_[ np.c_[ l.A        , np.zeros_like(l.A) ],
+                        np.c_[ f.B*K2*f.C, f.A-f.B*K2*f.C     ] ]
+      cfg.Bbar = np.r_[ np.c_[ l.B               , np.zeros((4,4)) ],
+                        np.c_[ np.zeros_like(l.B), f.B*K2         ] ]
+      cfg.Cbar = np.r_[ np.c_[ l.C               , np.zeros_like(l.C) ],
+                        np.c_[ np.zeros_like(l.C), l.C                ] ]
+      cfg.Qbar = np.r_[ np.c_[ Q1               , np.zeros_like(Q1)                ],
+                        np.c_[ np.zeros_like(Q1), Q2+f.B*K2*f.C*P*f.C.T*K2.T*f.B.T+f.B*K2*R2*K2.T*f.B.T ] ]
+      cfg.Rbar = np.r_[ np.c_[ R2               , np.zeros_like(R2) ],
+                        np.c_[ np.zeros_like(R2), R2                ] ]
+      # Compute the Augmented Kalman Gain
+      Xbar = linalg.solve_discrete_are( cfg.Abar.T, cfg.Cbar.T, cfg.Qbar, cfg.Rbar )
+      l.Lbar = Xbar * cfg.Cbar.T * linalg.inv( cfg.Cbar*Xbar*cfg.Cbar.T + cfg.Rbar )
+      # Initialize Augmented Estimate
+      l.xh_old_bar = np.matrix(np.zeros((8,1)))
+      # Turn Off Switch
+      cfg.leaderEstSwitch = 0
+    
+    # Calculate New Estimate
+    ubar = np.r_[ l.u_old, cfg.r[:,0], np.matrix(np.zeros((2,1))) ]
+    l.xh_new_bar = cfg.Abar * l.xh_old_bar + \
+                   cfg.Bbar * ubar + \
+                   l.Lbar   * ( np.r_[ l.y11, l.y12 ] - 
+                   cfg.Cbar * cfg.Abar * l.xh_old_bar - 
+                   cfg.Cbar * cfg.Bbar * ubar )
+    # Update Old Estimate
+    l.xh_old_bar = l.xh_new_bar
+    
+    xh_new = l.xh_new_bar[0:4,0]
+    
   return xh_new
   
 # # # # # # # # # # # # # # #
-# Function:  leadFrame      #
+# Function:  leaderFrame    #
 # # # # # # # # # # # # # # #
 
 def leaderFrame(leader, i):
