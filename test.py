@@ -15,8 +15,26 @@ def main():
   the program works.
   """
   
+  # Default Algorithm is Simple KF
+  if '--adv' in sys.argv:
+    cfg.leaderEstType = '--adv'
+    advOn = True
+  else:
+    cfg.leaderEstType = '--simple'
+    advOn = False
+  # Default is not to Save Error
+  if '--save' in sys.argv:
+    saveOn = True
+  else:
+    saveOn = False
+  # Default is not to Plot Animation & Error
+  if '--plot' in sys.argv:
+    plotOn = True
+  else:
+    plotOn = False
+  
   # Create Leader Agent
-  leader = agent.point( cfg.IC1 )
+  leader = agent.point( cfg.IC1, sensorCov=np.identity(4)*0.1, stateCov=np.identity(4)*0.1 )
   
   # Create Follower(s)
   f1 = agent.point( cfg.IC2 )
@@ -25,24 +43,19 @@ def main():
   
   # Run Simulation
   runSim( leader, f1, f2, f3 )
+    
+  # Save Error
+  if saveOn and not advOn:
+    fhandle = file('data/e_simple.csv','a')
+    np.savetxt(fhandle, cfg.e, delimiter=",")
+  elif saveOn and advOn:
+    fhandle = file('data/e_adv.csv','a')
+    np.savetxt(fhandle, cfg.e, delimiter=",")
   
-  # Simulation Animation
-  plotSim(leader, f1, f2, f3 )
-  
-  #np.savetxt("data/e.csv", leader.e, delimiter=",")
-  fig = plt.figure()
-  plt.plot(np.matrix(np.arange(0.0,cfg.T,cfg.Ts)).T, leader.e[0,:].T, \
-  'b', label='x1 error')
-  plt.plot(np.matrix(np.arange(0.0,cfg.T,cfg.Ts)).T, leader.e[1,:].T, \
-  'g', label='x2 error')
-  plt.plot(np.matrix(np.arange(0.0,cfg.T,cfg.Ts)).T, leader.e[4,:].T, \
-  'r', label=r'$e^T e$')
-  plt.grid()
-  plt.legend(loc=2)
-  plt.ylabel('Error [m]',rotation=90)
-  plt.xlabel('Time [s]')
-  #plt.title('Augmented Kalman Filter')
-  plt.show()
+  # Simulation Animation, Error Plot
+  if plotOn:
+    plotSim( leader, f1, f2, f3 )
+    plotError()
   
   
 # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -50,7 +63,6 @@ def main():
 #        Supporting Functions:                    #
 #                                                 #
 # # # # # # # # # # # # # # # # # # # # # # # # # # 
-
 
 
 # # # # # # # # # # # # #
@@ -69,8 +81,8 @@ def runSim(leader, *follower):
   cfg.numFollowers = len(follower)
   
   # Error Storage
-  leader.e = np.matrix(np.zeros((5,N_total)))
-  e_count  = 0
+  cfg.e = np.matrix(np.zeros((1,N_total)))
+  e_cnt  = 0
   
   # Track Each Waypoint Sequentially
   for target in range(cfg.n_wPts):
@@ -111,20 +123,26 @@ def runSim(leader, *follower):
       leader.y12 = follower[0].observe()
       
       # New Estimate
-      leader.xh_new = leaderEst( leader, follower )
+      if cfg.leaderEstType == '--simple':
+        leader.xh_new = leaderEst( leader )
+      elif cfg.leaderEstType == '--adv':
+        leader.xh_new = leaderEst( leader, follower )
+      else:
+        print '\n\ninvalid argument: '+cfg.leaderEstType+'\n\n'
+        sys.exit(0)
       
       # Compute and Store Error
-      e  = leader.xh_new - leader.X
-      e0 = e.T*e
-      leader.e[:,e_count] = np.r_[ e[:,0], e0 ]
-      e_count = e_count + 1
+      e              = leader.xh_new - leader.X
+      cfg.e[0,e_cnt] = e.T*e
+      e_cnt          = e_cnt + 1
       
-      # Leader's Tracking Control, u_ref
+      # Leader's Reference, x_ref
       if k==0:
         leader.Xref_new = X0
       else:
         leader.Xref_new = leader.A*leader.Xref_old + leader.B*u_ref
-        
+      
+      # Leader's Tracking Control, u_ref  
       u_ref = (leader.B.T) * (leader.A.T)**(N-1-k) * linalg.inv(leader.Wc) * \
               ( Xf - (leader.A**N)*X0 )
       # Leader's Total Control Input
@@ -455,6 +473,27 @@ def leaderFrame(leader, i):
   rotNorm = (1 / linalg.det(rot)**0.5) * rot
   bodyRef = rotNorm * cfg.r[:,i]
   return np.r_[bodyRef, np.zeros((2,1))]
+
+
+def plotError():
+  """
+  plotError() will plot the error in estimation:
+  e = (xh - x)^T * (xh - x)
+  """
+  
+  fig = plt.figure()
+  ax = fig.add_subplot(111)
+  ax.plot(np.matrix(np.arange(0.0,cfg.T,cfg.Ts)).T, cfg.e.T, \
+  'b', label='$(\hat{x}-x)^T(\hat{x}-x)$')
+  ax.grid()
+  ax.legend(loc=2)
+  plt.ylabel('Error [m]',rotation=90)
+  plt.xlabel('Time [s]')
+  if cfg.leaderEstType == '--simple':
+    plt.title('Simple Kalman Filter')
+  else:
+    plt.title('Augmented Kalman Filter')
+  plt.show()
 
 
 # # # # # # # # # # # # #

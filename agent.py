@@ -18,7 +18,10 @@ class point():
   with zero mean, constant covariance, normal distributions.
   """
   
-  def __init__( self, X=np.zeros((4,1)) ):
+  def __init__( self, 
+                X = np.zeros((4,1)),
+                stateCov  = np.identity(4) * 0.01,
+                sensorCov = np.identity(4) * 0.01 ):
     """ 
     Initialize point dynamics 
     """
@@ -41,9 +44,9 @@ class point():
     
     # Mean and Covariance of Noise in System
     self.stateMean  = (0,0,0,0)
-    self.stateCov   = np.identity(4) * 0.01  # Q
+    self.stateCov   = stateCov  # Q
     self.sensorMean = (0,0,0,0)
-    self.sensorCov  = np.identity(4) * 0.01  # R
+    self.sensorCov  = sensorCov  # R
     
     # Initialize State Estimate and Control Input
     self.xh_old = np.matrix(np.zeros((4,1)))

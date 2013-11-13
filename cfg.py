@@ -66,7 +66,12 @@ R = np.matrix([ [.1 , 0  ],
                 [0  , .1 ] ])
 
 # Some Extra Conditions
-stay = False             # leader waits at final waypoint
-stayTime = int(8/Ts)    # for 8 seconds
-leaderEstType = 'simple' # type of KF that leader uses ('simple' / 'adv')
-leaderEstSwitch = 1     # bool for intial advanced leader estimation
+#
+# bool if leader waits at final waypoint
+stay = False        
+# wait for 8 seconds
+stayTime = int(8/Ts)
+# type of KF that leader uses ('--simple' / '--adv')
+leaderEstType = '--simple'
+# bool for intial advanced leader estimation
+leaderEstSwitch = 1
