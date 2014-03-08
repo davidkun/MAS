@@ -33,9 +33,14 @@ def main():
   else:
     plotOn = False
   
-  # Create Leader Agent
-  leader = agent.point( cfg.IC1, sensorCov=np.identity(4)*0.1, stateCov=np.identity(4)*0.1 )
   
+  # Create Leader Agent
+  #leader = agent.point( cfg.IC1,
+  #                      stateCov  = np.identity(4)*0.00001,
+  #                      sensorCov1= np.identity(4)*0.00001,
+  #                      sensorCov2= np.identity(4)*0.00001, )
+  
+  leader = agent.point( cfg.IC1 )
   # Create Follower(s)
   f1 = agent.point( cfg.IC2 )
   f2 = agent.point( cfg.IC3 )
@@ -116,7 +121,7 @@ def runSim(leader, *follower):
     # Leader's simple Kalman Gain, Ls, using regular Filter
     leader.Ls = kalGain( leader )    
     
-    for k in range(N):        
+    for k in range(N):
       # Leader's Observation of Itself: y11
       leader.y11 = leader.selfObserve()
       # Leader's Observation of Follower: y12
@@ -352,8 +357,8 @@ def kalGain(f):
   R : covariance of measurement error
   """
   
-  Q = np.matrix( f.stateCov  )
-  R = np.matrix( f.sensorCov )
+  Q = np.matrix( f.stateCov   )
+  R = np.matrix( f.sensorCov1 )
   X = linalg.solve_discrete_are( f.A.T, f.C.T, Q, R )
   L = X * f.C.T * linalg.inv( f.C * X * f.C.T + R )
   return L
@@ -413,13 +418,14 @@ def leaderEst(*agents):
     
     if cfg.leaderEstSwitch:
       # Obtain Leader's and Follower's Data
-      K2 = fbGain(f)
-      L2 = kalGain(f)
-      Q1 = np.matrix( l.stateCov  )
-      Q2 = np.matrix( f.stateCov  )
-      R2 = np.matrix( f.sensorCov )
-      X  = linalg.solve_discrete_are( f.A.T, f.C.T, Q2, R2 )
-      P  = (np.matrix(np.identity(4)) - L2*f.C) * X
+      K2  = fbGain(f)
+      L2  = kalGain(f)
+      Q1  = np.matrix( l.stateCov   )
+      Q2  = np.matrix( f.stateCov   )
+      R21 = np.matrix( f.sensorCov1 )
+      R22 = np.matrix( f.sensorCov2 )
+      X   = linalg.solve_discrete_are( f.A.T, f.C.T, Q2, R21 ) # fix this R2
+      P   = (np.matrix(np.identity(4)) - L2*f.C) * X
       
       # Build Augment Matrices
       cfg.Abar = np.r_[ np.c_[ l.A        , np.zeros_like(l.A) ],
@@ -429,9 +435,10 @@ def leaderEst(*agents):
       cfg.Cbar = np.r_[ np.c_[ l.C               , np.zeros_like(l.C) ],
                         np.c_[ np.zeros_like(l.C), l.C                ] ]
       cfg.Qbar = np.r_[ np.c_[ Q1               , np.zeros_like(Q1)                ],
-                        np.c_[ np.zeros_like(Q1), Q2+f.B*K2*f.C*P*f.C.T*K2.T*f.B.T+f.B*K2*R2*K2.T*f.B.T ] ]
-      cfg.Rbar = np.r_[ np.c_[ R2               , np.zeros_like(R2) ],
-                        np.c_[ np.zeros_like(R2), R2                ] ]
+                        np.c_[ np.zeros_like(Q1), Q2+f.B*K2*f.C*P*f.C.T*\
+                                K2.T*f.B.T+f.B*K2*R22*K2.T*f.B.T ] ]
+      cfg.Rbar = np.r_[ np.c_[ R21               , np.zeros_like(R21) ],
+                        np.c_[ np.zeros_like(R21), R22                ] ]
       # Compute the Augmented Kalman Gain
       Xbar = linalg.solve_discrete_are( cfg.Abar.T, cfg.Cbar.T, cfg.Qbar, cfg.Rbar )
       l.Lbar = Xbar * cfg.Cbar.T * linalg.inv( cfg.Cbar*Xbar*cfg.Cbar.T + cfg.Rbar )
