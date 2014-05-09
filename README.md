@@ -1,4 +1,7 @@
 ### Welcome to my Project ###
+
+For better viewing, visit <http://davidkun.github.io/MAS/>
+
 I created a `point` class to represent a vehicle/agent in the system. It includes simple point-mass (linear) dynamic equations, specifications of state and sensor noise (when the agent moves or senses other agents), and several other methods.
 
 There is also a `test.py` module that imports the class, runs a multi-agent simulation, plots the results, and displays an animation. Here is an example of the animation that is created:
